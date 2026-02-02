@@ -1,0 +1,122 @@
+# OTP Auth - Passwordless Authentication App
+
+A Kotlin + Jetpack Compose Android app implementing passwordless Email + OTP authentication with a live session timer. No backend required - all OTP logic runs locally on-device.
+
+## Setup & Running
+
+### Prerequisites
+- **Android Studio** (Hedgehog or newer recommended)
+- **JDK 17**
+- **Android SDK** with API level 36 platform installed
+
+### Steps
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/code2946/android_development.git
+   ```
+2. Open the project in Android Studio.
+3. Let Gradle sync complete automatically.
+4. Connect an emulator or physical device (min SDK 24 / Android 7.0).
+5. Click **Run** or use `./gradlew assembleDebug` from terminal.
+6. The app launches on the Login screen - enter any valid email and tap **Send OTP**.
+7. The generated OTP is shown via a **Snackbar** at the bottom of the OTP screen. Enter that code to log in.
+
+> **Note:** OTPs are also logged to Logcat under the `Analytics` tag for debugging.
+
+## App Flow
+
+1. **Login Screen** - Enter email address, tap "Send OTP"
+2. **OTP Screen** - A 6-digit OTP is generated and shown via Snackbar. Enter it within 60 seconds. You get 3 attempts.
+3. **Session Screen** - Shows session start time, live `mm:ss` duration counter, and a Logout button.
+
+## Architecture
+
+- **MVVM** with `AuthViewModel` managing a single `StateFlow<AuthUiState>`
+- **Jetpack Compose** with Material3 theming (dark/light + dynamic color)
+- **Navigation Compose** with 3 routes: `login`, `otp`, `session`
+- **Coroutines** for countdown timer and session duration timer
+- **Sealed UI states** (`AuthUiState` sealed interface) for type-safe state management
+
+### Project Structure
+```
+com.app.otpauth/
+├── OtpAuthApp.kt                  # Application class (Timber init)
+├── MainActivity.kt                # Single Activity, hosts NavHost
+├── navigation/
+│   └── AppNavigation.kt           # NavHost with state-driven navigation
+├── ui/
+│   ├── theme/                     # Material3 Color, Type, Theme
+│   ├── login/LoginScreen.kt       # Email input + Send OTP
+│   ├── otp/OtpScreen.kt           # OTP entry + countdown + validation
+│   └── session/SessionScreen.kt   # Session timer + logout
+├── viewmodel/
+│   ├── AuthViewModel.kt           # Shared ViewModel for auth flow
+│   └── AuthUiState.kt             # Sealed interface for UI states
+├── data/
+│   ├── OtpManager.kt              # OTP generation, storage, validation
+│   └── OtpData.kt                 # Data class for OTP record
+└── analytics/
+    └── AnalyticsLogger.kt         # Timber-based event logger
+```
+
+## OTP Logic & Expiry Handling
+
+- **Generation**: 6-digit random code using `java.security.SecureRandom`
+- **Storage**: In-memory `MutableMap<String, OtpData>` keyed by email. Each email has exactly one active OTP at a time.
+- **Expiry**: Each OTP is valid for 60 seconds from generation. A coroutine-based countdown timer ticks every second and marks the OTP as expired at 0.
+- **Attempts**: Maximum 3 attempts per OTP. After 3 incorrect entries, the user is locked out and must resend.
+- **Resend**: Generating a new OTP replaces the old entry in the map, effectively invalidating it. The attempt counter and countdown timer both reset.
+- **Validation results**: A sealed interface `OtpValidationResult` returns one of: `Success`, `Expired`, `InvalidCode(attemptsLeft)`, `MaxAttemptsReached`, or `NotFound`.
+
+## Data Structures & Reasoning
+
+| Structure | Purpose | Why |
+|-----------|---------|-----|
+| `MutableMap<String, OtpData>` | Stores one OTP per email | O(1) lookup by email, automatic old-OTP replacement on re-key, clean per-email isolation |
+| `OtpData` data class | Holds code, timestamps, attempt count | Immutable record with `copy()` for safe updates |
+| `AuthUiState` sealed interface | Represents screen states | Exhaustive `when` matching ensures all states are handled, no invalid state combinations |
+| `StateFlow<AuthUiState>` | Observable state in ViewModel | Survives configuration changes, integrates with Compose via `collectAsStateWithLifecycle` |
+
+## External SDK: Timber
+
+**Why Timber over Firebase Analytics or Sentry:**
+- Lightweight with no external service dependency - ideal for a local-only assignment
+- Clean API with format string support (`%s` placeholders) and automatic class-name tagging
+- Zero overhead in release builds when no trees are planted
+- Easy to filter in Logcat with the `[Analytics]` prefix
+
+**Initialization:** `Timber.DebugTree()` is planted in `OtpAuthApp.onCreate()`.
+
+**Logged events:**
+| Event | When | Logger Method |
+|-------|------|---------------|
+| OTP Generated | User taps Send OTP or Resend | `AnalyticsLogger.logOtpGenerated(email)` |
+| OTP Validation Success | Correct OTP entered | `AnalyticsLogger.logOtpSuccess(email)` |
+| OTP Validation Failure | Wrong code, expired, or max attempts | `AnalyticsLogger.logOtpFailure(email, reason)` |
+| Logout | User taps Logout | `AnalyticsLogger.logLogout(email)` |
+
+## Edge Cases Handled
+
+| Case | Handling |
+|------|----------|
+| Expired OTP | Countdown reaches 0, `isExpired = true`, verify button disabled, validate returns `Expired` |
+| Incorrect OTP | Attempts decremented, error shown with remaining count |
+| Max attempts exceeded (3) | User locked out, must tap Resend to get a new OTP |
+| Resend OTP | New OTP generated, old one invalidated, timer and attempts fully reset |
+| Screen rotation | ViewModel survives, `rememberSaveable` preserves OTP digit input |
+| Logout | Session timer job cancelled, state reset to `EmailEntry`, back stack cleared |
+
+## Bonus Features
+
+- **Visual countdown timer**: Circular progress indicator with animated color (turns red under 10s)
+- **Sealed UI states**: `AuthUiState` sealed interface with `EmailEntry`, `OtpEntry`, `Session`
+- **Retry cooldown handling**: Resend button state management with full reset
+
+## AI Usage Disclosure
+
+This project was developed with the assistance of AI tools (GPT-based). AI was used for:
+- Initial project scaffolding and boilerplate generation
+- Drafting Compose screen layouts and navigation setup
+- Suggesting OTP validation logic structure
+
+All code was reviewed, understood, and modified as needed. Architecture decisions (MVVM with sealed states, Map-based OTP storage, Timber for analytics) were made based on my understanding of Android best practices and the assignment requirements.
