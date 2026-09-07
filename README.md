@@ -12,8 +12,8 @@ A Kotlin + Jetpack Compose Android app implementing passwordless Email + OTP aut
 ### Steps
 1. **Clone** the repository:
    ```bash
-   git clone https://github.com/code2946/android_development.git
-   cd android_development
+   git clone https://github.com/saxena-aryan-dev/otp-auth-android.git
+   cd otp-auth-android
    ```
 2. **Open** the project in Android Studio (`File > Open` and select the cloned folder).
 3. **Wait for Gradle sync** to complete. Android Studio will automatically:
